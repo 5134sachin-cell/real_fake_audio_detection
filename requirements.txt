@@ -1,0 +1,10 @@
+flask
+librosa
+matplotlib
+numpy
+requests
+scipy
+scikit-learn
+soundfile
+torch
+TTS

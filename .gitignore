@@ -1,0 +1,25 @@
+.venv/
+__pycache__/
+*.py[cod]
+
+# Local dataset and generated artifacts
+data/
+outputs/
+
+# Python tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Environment files
+.env
+.env.*
+
+# Editor and OS files
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

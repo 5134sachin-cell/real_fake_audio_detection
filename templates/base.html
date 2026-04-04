@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Local Flask application for AI voice detection and voice cloning.">
+    <title>{% block title %}VoiceWorkbench{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="page-shell">
+        <header class="site-header">
+            <div class="brand-block">
+                <a href="{{ url_for('index') }}" class="brand-link">VoiceWorkbench</a>
+                <p class="brand-copy">Voice detection and cloning in one clean project dashboard.</p>
+            </div>
+            <nav class="site-nav" aria-label="Primary">
+                <a href="{{ url_for('index') }}" class="nav-link {% if active_page == 'home' %}is-active{% endif %}">Home</a>
+                <a href="{{ url_for('index') }}#detect-tool" class="nav-link">Detector</a>
+                <a href="{{ url_for('index') }}#clone-tool" class="nav-link">Clone</a>
+            </nav>
+        </header>
+
+        <main class="page-main">
+            {% block content %}{% endblock %}
+        </main>
+
+        <footer class="site-footer">
+            <p>Final year project for AI voice detection and speaker-based cloning.</p>
+        </footer>
+    </div>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,614 @@
+{% extends "base.html" %}
+{% block title %}VoiceWorkbench{% endblock %}
+
+{% block content %}
+
+
+<section id="detect-tool" class="flow-stack">
+    <section class="page-heading">
+        <div>
+            <p class="eyebrow">Detection Tool</p>
+            <h1>Check whether an audio sample is human or AI-generated.</h1>
+            <p class="page-copy">Upload a WAV file or record from the microphone, then run analysis directly on this page.</p>
+        </div>
+        <div class="status-note {% if system_status.detector.ready %}status-ok{% else %}status-warn{% endif %}">
+            <strong>{{ "Model ready" if system_status.detector.ready else "Model unavailable" }}</strong>
+            <span>{{ system_status.detector.message }}</span>
+        </div>
+    </section>
+
+    <section class="tool-layout">
+        <article class="tool-panel">
+            <form id="detect-form" action="{{ url_for('detect') }}" method="post" enctype="multipart/form-data">
+                <label class="field-block">
+                    <span class="field-label">Audio sample</span>
+                    <input id="detect-file" name="file" type="file" accept=".wav,audio/wav" class="input-file">
+                </label>
+
+                <div class="file-meta" id="detect-file-meta">No file selected.</div>
+
+                <div class="preview-block">
+                    <p class="field-label">Preview</p>
+                    <audio id="detect-preview" controls class="audio-player" hidden></audio>
+                </div>
+
+                <div class="file-meta" id="detect-record-meta" aria-live="polite">Recorder idle.</div>
+
+                <div class="wave-wrap">
+                    <p class="field-label">Live waveform</p>
+                    <canvas id="detect-wave" width="560" height="120"></canvas>
+                    <div class="file-meta" id="detect-wave-meta">Waveform will appear while recording.</div>
+                </div>
+                <div class="field-row">
+                    <button class="button button-secondary" id="detect-record-start" type="button" {% if not system_status.detector.ready %}disabled{% endif %}>
+                        Start Recording
+                    </button>
+                    <button class="button button-secondary" id="detect-record-stop" type="button" disabled>
+                        Stop and Analyze
+                    </button>
+                </div>
+
+                <button class="button button-primary" id="detect-submit" type="submit" {% if not system_status.detector.ready %}disabled{% endif %}>
+                    Run Detection
+                </button>
+            </form>
+
+            <div class="feedback error-text" id="detect-error" hidden></div>
+        </article>
+
+        <aside class="side-panel">
+            <h2>Detection Tips</h2>
+            <p>Use clear speech with low background noise for more stable predictions.</p>
+            <p>Short samples work, but a few seconds of voice usually give better results.</p>
+            <p>If you use the recorder, speak close to the microphone before stopping the capture.</p>
+        </aside>
+    </section>
+
+    <section class="result-card" id="detect-result" hidden>
+        <div class="result-head">
+            <p class="eyebrow">Result</p>
+            <h2 id="detect-label">Waiting for analysis</h2>
+        </div>
+
+        <div class="meter-block">
+            <div class="meter-label-row">
+                <span>Confidence</span>
+                <strong id="detect-confidence">0%</strong>
+            </div>
+            <div class="meter-track">
+                <div class="meter-fill" id="detect-meter"></div>
+            </div>
+        </div>
+    </section>
+</section>
+
+<section id="clone-tool" class="flow-stack">
+    <section class="page-heading">
+        <div>
+            <p class="eyebrow">Voice Clone Tool</p>
+            <h1>Create a cloned voice from a reference speaker sample.</h1>
+            <p class="page-copy">Upload a WAV sample, enter text, choose language and speed, then preview the generated result.</p>
+        </div>
+        <div class="status-note {% if system_status.clone.ready %}status-ok{% else %}status-warn{% endif %}">
+            <strong>{{ "Clone route available" if system_status.clone.ready else "Clone route blocked" }}</strong>
+            <span>{{ system_status.clone.message }}</span>
+        </div>
+    </section>
+
+    <section class="tool-layout">
+        <article class="tool-panel">
+            <form id="clone-form" action="{{ url_for('clone') }}" method="post" enctype="multipart/form-data">
+                <label class="field-block">
+                    <span class="field-label">Speaker sample</span>
+                    <input id="speaker-file" name="speaker_audio" type="file" accept=".wav,audio/wav" class="input-file" required>
+                </label>
+
+                <div class="file-meta" id="speaker-file-meta">No speaker sample selected.</div>
+
+                <div class="preview-block">
+                    <p class="field-label">Speaker preview</p>
+                    <audio id="speaker-preview" controls class="audio-player" hidden></audio>
+                </div>
+
+                <label class="field-block">
+                    <span class="field-label">Text to synthesize</span>
+                    <textarea id="clone-text" name="text" rows="5" class="text-input" placeholder="Type the sentence that should be spoken in the cloned voice." required></textarea>
+                </label>
+
+                <div class="field-row">
+                    <label class="field-block">
+                        <span class="field-label">Speed</span>
+                        <input id="clone-speed" name="speed" type="range" min="0.7" max="1.3" step="0.1" value="1.0">
+                        <span class="range-readout"><strong id="speed-value">1.0</strong>x</span>
+                    </label>
+                </div>
+
+                <button class="button button-primary" id="clone-submit" type="submit" {% if not system_status.clone.ready %}disabled{% endif %}>
+                    Generate Clone
+                </button>
+            </form>
+
+            <div class="feedback error-text" id="clone-error" hidden></div>
+        </article>
+
+        <aside class="side-panel">
+            <h2>Cloning Tips</h2>
+            <p>Use a clean reference sample with one speaker and minimal background noise.</p>
+            <p>The best input is at least a few seconds of clear speech in WAV format.</p>
+            <p>The first generation can take longer because the TTS model may load on demand.</p>
+        </aside>
+    </section>
+
+    <section class="result-card" id="clone-result" hidden>
+        <div class="result-head">
+            <p class="eyebrow">Generated Output</p>
+            <h2>Cloned audio is ready</h2>
+        </div>
+
+        <audio id="clone-output" controls class="audio-player"></audio>
+        <a id="clone-download" class="button button-secondary" download="cloned_voice.wav">Download WAV</a>
+    </section>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const detectForm = document.getElementById("detect-form");
+    const detectFile = document.getElementById("detect-file");
+    const detectMeta = document.getElementById("detect-file-meta");
+    const detectPreview = document.getElementById("detect-preview");
+    const detectSubmit = document.getElementById("detect-submit");
+    const detectError = document.getElementById("detect-error");
+    const detectResult = document.getElementById("detect-result");
+    const detectLabel = document.getElementById("detect-label");
+    const detectConfidence = document.getElementById("detect-confidence");
+    const detectMeter = document.getElementById("detect-meter");
+    const detectInitiallyDisabled = detectSubmit.disabled;
+    const detectRecordMeta = document.getElementById("detect-record-meta");
+    const detectRecordStart = document.getElementById("detect-record-start");
+    const detectRecordStop = document.getElementById("detect-record-stop");
+    const detectWaveCanvas = document.getElementById("detect-wave");
+    const detectWaveMeta = document.getElementById("detect-wave-meta");
+    const detectWaveCtx = detectWaveCanvas ? detectWaveCanvas.getContext("2d") : null;
+
+    // Live recording (mic -> WAV) so backend can keep accepting `.wav` only.
+    let recordStream = null;
+    let recordAudioContext = null;
+    let recordProcessor = null;
+    let recordSourceNode = null;
+    let recordChunks = [];
+    let recordSampleRate = 44100;
+    let recordStartTs = 0;
+    let recordTimer = null;
+    let recordAnalyser = null;
+    let recordTimeData = null;
+    let waveRafId = null;
+    let lastRecordedFile = null;
+    let recordMaxAbs = 0;
+
+    function resetDetectError() {
+        detectError.hidden = true;
+        detectError.textContent = "";
+    }
+
+    function showDetectError(message) {
+        detectError.hidden = false;
+        detectError.textContent = message;
+    }
+
+    function setDetectBusy(isBusy) {
+        detectSubmit.disabled = isBusy || detectInitiallyDisabled;
+        detectSubmit.textContent = isBusy ? "Analyzing..." : "Run Detection";
+    }
+
+    function setRecorderBusy(isBusy) {
+        detectRecordStart.disabled = isBusy || detectInitiallyDisabled;
+        detectRecordStop.disabled = isBusy || detectInitiallyDisabled;
+    }
+
+    function updateRecorderMeta(text) {
+        if (detectRecordMeta) detectRecordMeta.textContent = text;
+    }
+
+    function floatTo16BitPCM(view, offset, input) {
+        for (let i = 0; i < input.length; i++, offset += 2) {
+            const s = Math.max(-1, Math.min(1, input[i]));
+            view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+        }
+    }
+
+    function writeWavBlobFromFloat32(monoFloat32, sampleRate) {
+        const numChannels = 1;
+        const bitsPerSample = 16;
+        const format = 1; // PCM
+        const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+        const blockAlign = numChannels * (bitsPerSample / 8);
+        const dataSize = monoFloat32.length * numChannels * (bitsPerSample / 8);
+        const buffer = new ArrayBuffer(44 + dataSize);
+        const view = new DataView(buffer);
+
+        // RIFF header
+        let offset = 0;
+        view.setUint32(offset, 0x52494646, false); offset += 4; // "RIFF"
+        view.setUint32(offset, 36 + dataSize, true); offset += 4;
+        view.setUint32(offset, 0x57415645, false); offset += 4; // "WAVE"
+
+        // fmt chunk
+        view.setUint32(offset, 0x666d7420, false); offset += 4; // "fmt "
+        view.setUint32(offset, 16, true); offset += 4; // PCM chunk size
+        view.setUint16(offset, format, true); offset += 2;
+        view.setUint16(offset, numChannels, true); offset += 2;
+        view.setUint32(offset, sampleRate, true); offset += 4;
+        view.setUint32(offset, byteRate, true); offset += 4;
+        view.setUint16(offset, blockAlign, true); offset += 2;
+        view.setUint16(offset, bitsPerSample, true); offset += 2;
+
+        // data chunk
+        view.setUint32(offset, 0x64617461, false); offset += 4; // "data"
+        view.setUint32(offset, dataSize, true); offset += 4;
+
+        floatTo16BitPCM(view, 44, monoFloat32);
+        return new Blob([buffer], { type: "audio/wav" });
+    }
+
+    async function analyzeDetectFile(file) {
+        detectResult.hidden = true;
+        resetDetectError();
+
+        if (!file) {
+            showDetectError("Choose an audio file before running detection.");
+            return;
+        }
+
+        setDetectBusy(true);
+
+        try {
+            const wavFile = file instanceof File ? file : new File([file], "recording.wav", { type: "audio/wav" });
+            const formData = new FormData();
+            formData.append("file", wavFile, wavFile.name || "recording.wav");
+
+            const response = await fetch(detectForm.action, {
+                method: "POST",
+                body: formData
+            });
+
+            const isJson = (response.headers.get("content-type") || "").includes("application/json");
+            const payload = isJson ? await response.json() : null;
+
+            if (!response.ok) {
+                throw new Error(payload && payload.error ? payload.error : "Detection failed.");
+            }
+
+            const confidence = Number(payload.confidence || 0);
+            const isHuman = String(payload.label || "").includes("HUMAN");
+
+            detectLabel.textContent = payload.label || "Unknown";
+            detectConfidence.textContent = `${confidence.toFixed(2)}%`;
+            detectMeter.style.width = `${confidence}%`;
+            detectMeter.classList.toggle("meter-human", isHuman);
+            detectMeter.classList.toggle("meter-ai", !isHuman);
+            detectResult.classList.toggle("result-human", isHuman);
+            detectResult.classList.toggle("result-ai", !isHuman);
+            detectResult.hidden = false;
+        } catch (error) {
+            showDetectError(error.message || "Detection failed.");
+        } finally {
+            setDetectBusy(false);
+        }
+    }
+
+    detectFile.addEventListener("change", () => {
+        resetDetectError();
+        const file = detectFile.files[0];
+        if (!file) {
+            detectMeta.textContent = "No file selected.";
+            detectPreview.hidden = true;
+            detectPreview.removeAttribute("src");
+            return;
+        }
+
+        detectMeta.textContent = `${file.name} | ${(file.size / 1024 / 1024).toFixed(2)} MB`;
+        detectPreview.src = URL.createObjectURL(file);
+        detectPreview.hidden = false;
+    });
+
+    detectForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const file = detectFile.files[0] || lastRecordedFile;
+        await analyzeDetectFile(file);
+    });
+
+    function startLiveRecording() {
+        resetDetectError();
+        detectResult.hidden = true;
+        updateRecorderMeta("Requesting microphone permission...");
+
+        setRecorderBusy(true);
+        detectRecordStart.disabled = true;
+        detectRecordStop.disabled = false;
+
+        recordChunks = [];
+        recordMaxAbs = 0;
+
+        navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+            recordStream = stream;
+            recordAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+            recordSampleRate = recordAudioContext.sampleRate;
+            recordStartTs = Date.now();
+
+            const source = recordAudioContext.createMediaStreamSource(stream);
+            recordSourceNode = source;
+
+            // Create a visual waveform reader.
+            recordAnalyser = recordAudioContext.createAnalyser();
+            recordAnalyser.fftSize = 2048;
+            recordAnalyser.smoothingTimeConstant = 0.65;
+            // getByteTimeDomainData() fills fftSize samples (not frequencyBinCount).
+            recordTimeData = new Uint8Array(recordAnalyser.fftSize);
+            source.connect(recordAnalyser);
+
+            // ScriptProcessorNode is deprecated, but widely available for simple projects.
+            const processor = recordAudioContext.createScriptProcessor(4096, 1, 1);
+            recordProcessor = processor;
+
+            processor.onaudioprocess = (e) => {
+                const input = e.inputBuffer.getChannelData(0);
+                // Track mic energy so we can detect if the stream is silent/blocked.
+                // (Silence often causes the model to output a confident but wrong label.)
+                let localMax = 0;
+                for (let i = 0; i < input.length; i++) {
+                    const v = Math.abs(input[i]);
+                    if (v > localMax) localMax = v;
+                }
+                if (localMax > recordMaxAbs) recordMaxAbs = localMax;
+                recordChunks.push(new Float32Array(input));
+            };
+
+            // Avoid feedback: connect processor -> silent gain -> destination
+            const gain = recordAudioContext.createGain();
+            // Some browsers may stop AudioWork/Scripting when output is fully muted (0).
+            // Use a very tiny gain to keep processing alive without audible feedback.
+            gain.gain.value = 0.00001;
+            source.connect(processor);
+            processor.connect(gain);
+            gain.connect(recordAudioContext.destination);
+
+            if (recordTimer) clearInterval(recordTimer);
+            recordTimer = setInterval(() => {
+                const secs = (Date.now() - recordStartTs) / 1000;
+                updateRecorderMeta(`Recording... ${secs.toFixed(1)}s`);
+            }, 150);
+
+            // Animation loop for the waveform.
+            const drawWaveform = () => {
+                if (!detectWaveCtx || !detectWaveCanvas || !recordAnalyser || !recordTimeData) return;
+
+                const width = detectWaveCanvas.width;
+                const height = detectWaveCanvas.height;
+                detectWaveCtx.clearRect(0, 0, width, height);
+
+                // Required: copy analyser samples into recordTimeData each frame.
+                recordAnalyser.getByteTimeDomainData(recordTimeData);
+
+                // Center line (background).
+                detectWaveCtx.strokeStyle = "rgba(31, 41, 51, 0.35)";
+                detectWaveCtx.lineWidth = 1;
+                detectWaveCtx.beginPath();
+                detectWaveCtx.moveTo(0, height / 2);
+                detectWaveCtx.lineTo(width, height / 2);
+                detectWaveCtx.stroke();
+
+                detectWaveCtx.lineWidth = 2;
+                detectWaveCtx.strokeStyle = "#c45b34";
+                detectWaveCtx.beginPath();
+
+                const sliceW = width / recordTimeData.length;
+                const amplitudeScale = 3.0; // exaggerate movement so quiet speech is visible
+                for (let i = 0; i < recordTimeData.length; i++) {
+                    const centered = (recordTimeData[i] - 128) / 128; // approx -1..1
+                    let y = (height / 2) + centered * (height / 2 - 6) * amplitudeScale;
+                    // Clamp into canvas bounds
+                    if (y < 2) y = 2;
+                    if (y > height - 2) y = height - 2;
+                    const x = i * sliceW;
+                    if (i === 0) detectWaveCtx.moveTo(x, y);
+                    else detectWaveCtx.lineTo(x, y);
+                }
+                detectWaveCtx.stroke();
+
+                waveRafId = requestAnimationFrame(drawWaveform);
+            };
+
+            const startWaveLoop = () => {
+                if (waveRafId) cancelAnimationFrame(waveRafId);
+                drawWaveform();
+            };
+            // Many browsers start AudioContext suspended; resume before reading analyser data.
+            if (recordAudioContext.state === "suspended") {
+                recordAudioContext.resume().then(startWaveLoop).catch(startWaveLoop);
+            } else {
+                startWaveLoop();
+            }
+
+            updateRecorderMeta("Recording...");
+            if (detectWaveMeta) detectWaveMeta.textContent = "Listening... recording waveform";
+        }).catch((err) => {
+            setRecorderBusy(false);
+            detectRecordStop.disabled = true;
+            detectRecordStart.disabled = detectInitiallyDisabled;
+            updateRecorderMeta("Recorder idle.");
+            if (waveRafId) cancelAnimationFrame(waveRafId);
+            waveRafId = null;
+            recordAnalyser = null;
+            recordTimeData = null;
+            showDetectError(err.message || "Microphone permission denied.");
+        });
+    }
+
+    async function stopLiveRecording() {
+        setRecorderBusy(true);
+        updateRecorderMeta("Stopping...");
+
+        try {
+            if (recordTimer) clearInterval(recordTimer);
+            recordTimer = null;
+
+            if (waveRafId) cancelAnimationFrame(waveRafId);
+            waveRafId = null;
+            if (detectWaveCtx && detectWaveCanvas) {
+                detectWaveCtx.clearRect(0, 0, detectWaveCanvas.width, detectWaveCanvas.height);
+            }
+            if (recordAnalyser) recordAnalyser.disconnect();
+            recordAnalyser = null;
+            recordTimeData = null;
+
+            if (recordStream) {
+                recordStream.getTracks().forEach((t) => t.stop());
+            }
+            if (recordProcessor) recordProcessor.disconnect();
+            if (recordSourceNode) recordSourceNode.disconnect();
+            if (recordAudioContext) await recordAudioContext.close();
+        } catch (_) {
+            // best-effort cleanup
+        } finally {
+            recordStream = null;
+            recordAudioContext = null;
+            recordProcessor = null;
+            recordSourceNode = null;
+        }
+
+        const totalLen = recordChunks.reduce((acc, c) => acc + c.length, 0);
+        if (!recordChunks.length || totalLen === 0 || recordMaxAbs < 1e-4) {
+            setRecorderBusy(false);
+            showDetectError("Mic capture is silent or blocked. Try again and speak closer to the microphone.");
+            updateRecorderMeta("Recorder idle.");
+            return;
+        }
+        const merged = new Float32Array(totalLen);
+        let offset = 0;
+        for (const chunk of recordChunks) {
+            merged.set(chunk, offset);
+            offset += chunk.length;
+        }
+
+        const wavBlob = writeWavBlobFromFloat32(merged, recordSampleRate);
+        const wavFile = new File([wavBlob], "recording.wav", { type: "audio/wav" });
+        lastRecordedFile = wavFile;
+
+        // Preview the recorded audio locally.
+        if (detectPreview) {
+            const objectUrl = URL.createObjectURL(wavBlob);
+            detectPreview.src = objectUrl;
+            detectPreview.hidden = false;
+        }
+
+        updateRecorderMeta("Analyzing recorded audio...");
+        detectMeta.textContent = `recording.wav | ${(wavBlob.size / 1024 / 1024).toFixed(2)} MB`;
+        detectRecordStart.disabled = detectInitiallyDisabled;
+        detectRecordStop.disabled = true;
+
+        await analyzeDetectFile(wavFile);
+
+        updateRecorderMeta("Recorder idle.");
+        setRecorderBusy(false);
+    }
+
+    detectRecordStart.addEventListener("click", () => {
+        if (detectRecordStart.disabled) return;
+        startLiveRecording();
+    });
+
+    detectRecordStop.addEventListener("click", () => {
+        if (detectRecordStop.disabled) return;
+        stopLiveRecording();
+    });
+
+    const cloneForm = document.getElementById("clone-form");
+    const speakerFile = document.getElementById("speaker-file");
+    const speakerMeta = document.getElementById("speaker-file-meta");
+    const speakerPreview = document.getElementById("speaker-preview");
+    const cloneSubmit = document.getElementById("clone-submit");
+    const cloneError = document.getElementById("clone-error");
+    const cloneSpeed = document.getElementById("clone-speed");
+    const speedValue = document.getElementById("speed-value");
+    const cloneResult = document.getElementById("clone-result");
+    const cloneOutput = document.getElementById("clone-output");
+    const cloneDownload = document.getElementById("clone-download");
+    const cloneInitiallyDisabled = cloneSubmit.disabled;
+    let cloneObjectUrl = null;
+
+    function resetCloneError() {
+        cloneError.hidden = true;
+        cloneError.textContent = "";
+    }
+
+    function showCloneError(message) {
+        cloneError.hidden = false;
+        cloneError.textContent = message;
+    }
+
+    function setCloneBusy(isBusy) {
+        cloneSubmit.disabled = isBusy || cloneInitiallyDisabled;
+        cloneSubmit.textContent = isBusy ? "Generating..." : "Generate Clone";
+    }
+
+    speakerFile.addEventListener("change", () => {
+        resetCloneError();
+        const file = speakerFile.files[0];
+        if (!file) {
+            speakerMeta.textContent = "No speaker sample selected.";
+            speakerPreview.hidden = true;
+            speakerPreview.removeAttribute("src");
+            return;
+        }
+
+        speakerMeta.textContent = `${file.name} | ${(file.size / 1024 / 1024).toFixed(2)} MB`;
+        speakerPreview.src = URL.createObjectURL(file);
+        speakerPreview.hidden = false;
+    });
+
+    cloneSpeed.addEventListener("input", () => {
+        speedValue.textContent = cloneSpeed.value;
+    });
+
+    cloneForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        resetCloneError();
+        cloneResult.hidden = true;
+
+        if (!speakerFile.files[0]) {
+            showCloneError("Choose a speaker sample before generating.");
+            return;
+        }
+
+        const formData = new FormData(cloneForm);
+
+        try {
+            setCloneBusy(true);
+            const response = await fetch(cloneForm.action, {
+                method: "POST",
+                body: formData
+            });
+
+            if (!response.ok) {
+                const isJson = (response.headers.get("content-type") || "").includes("application/json");
+                const payload = isJson ? await response.json() : null;
+                throw new Error(payload && payload.error ? payload.error : "Voice cloning failed.");
+            }
+
+            const audioBlob = await response.blob();
+            if (cloneObjectUrl) {
+                URL.revokeObjectURL(cloneObjectUrl);
+            }
+            cloneObjectUrl = URL.createObjectURL(audioBlob);
+            cloneOutput.src = cloneObjectUrl;
+            cloneDownload.href = cloneObjectUrl;
+            cloneResult.hidden = false;
+        } catch (error) {
+            showCloneError(error.message || "Voice cloning failed.");
+        } finally {
+            setCloneBusy(false);
+        }
+    });
+</script>
+{% endblock %}
