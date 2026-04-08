@@ -89,8 +89,8 @@
             <h1>Create a cloned voice from a reference speaker sample.</h1>
             <p class="page-copy">Upload a WAV sample, enter text, choose language and speed, then preview the generated result.</p>
         </div>
-        <div class="status-note {% if system_status.clone.ready %}status-ok{% else %}status-warn{% endif %}">
-            <strong>{{ "Clone route available" if system_status.clone.ready else "Clone route blocked" }}</strong>
+        <div class="status-note {% if system_status.clone.verified %}status-ok{% else %}status-warn{% endif %}">
+            <strong>{{ "Clone model verified" if system_status.clone.verified else "Clone model not verified" }}</strong>
             <span>{{ system_status.clone.message }}</span>
         </div>
     </section>
@@ -134,7 +134,8 @@
         <aside class="side-panel">
             <h2>Cloning Tips</h2>
             <p>Use a clean reference sample with one speaker and minimal background noise.</p>
-            <p>The best input is at least a few seconds of clear speech in WAV format.</p>
+            <p>The strongest matches usually come from 5 to 20 seconds of natural speech, not a very long recording.</p>
+            <p>Short everyday sentences clone more naturally than long technical paragraphs with symbols or numbered lists.</p>
             <p>The first generation can take longer because the TTS model may load on demand.</p>
         </aside>
     </section>
@@ -145,6 +146,7 @@
             <h2>Cloned audio is ready</h2>
         </div>
 
+        <p class="file-meta" id="clone-info">Output details will appear after generation.</p>
         <audio id="clone-output" controls class="audio-player"></audio>
         <a id="clone-download" class="button button-secondary" download="cloned_voice.wav">Download WAV</a>
     </section>
@@ -534,6 +536,7 @@
     const cloneResult = document.getElementById("clone-result");
     const cloneOutput = document.getElementById("clone-output");
     const cloneDownload = document.getElementById("clone-download");
+    const cloneInfo = document.getElementById("clone-info");
     const cloneInitiallyDisabled = cloneSubmit.disabled;
     let cloneObjectUrl = null;
 
@@ -601,6 +604,21 @@
                 URL.revokeObjectURL(cloneObjectUrl);
             }
             cloneObjectUrl = URL.createObjectURL(audioBlob);
+
+            const speakerDuration = response.headers.get("X-Clone-Speaker-Duration");
+            const outputDuration = response.headers.get("X-Clone-Output-Duration");
+            const sampleRate = response.headers.get("X-Clone-Sample-Rate");
+            const referenceClips = response.headers.get("X-Clone-Reference-Clips");
+            const referenceSampleRate = response.headers.get("X-Clone-Reference-Sample-Rate");
+            if (cloneInfo) {
+                if (speakerDuration && outputDuration && sampleRate) {
+                    const refClipText = referenceClips ? ` | Clips: ${referenceClips}` : "";
+                    const refSampleRateText = referenceSampleRate ? ` | Ref: ${referenceSampleRate} Hz` : "";
+                    cloneInfo.textContent = `Reference used: ${speakerDuration}s${refClipText}${refSampleRateText} | Generated: ${outputDuration}s | Output: ${sampleRate} Hz`;
+                } else {
+                    cloneInfo.textContent = "Clone generated successfully.";
+                }
+            }
             cloneOutput.src = cloneObjectUrl;
             cloneDownload.href = cloneObjectUrl;
             cloneResult.hidden = false;

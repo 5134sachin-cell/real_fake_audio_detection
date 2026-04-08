@@ -3,7 +3,7 @@ import glob
 import os
 import sys
 
-BASE_URL = "http://127.0.0.1:5000"
+BASE_URL = os.environ.get("VOICE_WORKBENCH_URL", "http://127.0.0.1:5000")
 
 print("--- Testing /detect endpoint ---")
 real_files = glob.glob("data/real/*.wav")

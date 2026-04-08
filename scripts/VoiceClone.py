@@ -22,14 +22,20 @@ def main() -> None:
     args = parser.parse_args()
 
     cloner = VoiceCloner()
-    out_path = cloner.clone(
+    result = cloner.clone(
         speaker_wav=args.speaker_wav,
         text=args.text,
         speed=args.speed,
         language=args.language,
         output_dir="outputs",
     )
-    print(f"Saved cloned audio: {out_path}")
+    print(f"Saved cloned audio: {result.output_path}")
+    print(
+        "Output details: "
+        f"speaker={result.speaker_duration_sec:.2f}s, "
+        f"clone={result.output_duration_sec:.2f}s, "
+        f"sample_rate={result.sample_rate}Hz"
+    )
 
 
 if __name__ == "__main__":

@@ -11,14 +11,49 @@ import torch
 from src.logger import get_logger
 from src.models.cnn import DeepfakeCNN
 from src.preprocessing.audio_features import AudioConfig, load_audio_resampled, to_mel_spec
+from src.runtime_paths import bundle_root, models_dir, runtime_home
 
 logger = get_logger("detector")
-BASE_DIR = Path(__file__).resolve().parents[2]
 MODEL_CANDIDATES = (
-    BASE_DIR / "models" / "fake_audio_cnn.pth",
-    BASE_DIR / "fake_audio_cnn.pth",
+    runtime_home() / "models" / "fake_audio_cnn.pth",
+    models_dir() / "fake_audio_cnn.pth",
+    bundle_root() / "fake_audio_cnn.pth",
 )
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def _segment_signal_score(segment: np.ndarray) -> float:
+    if segment.size == 0:
+        return 0.0
+    rms = float(np.sqrt(np.mean(segment**2)))
+    peak = float(np.max(np.abs(segment)))
+    return max(0.0, rms + (0.1 * peak))
+
+
+def _candidate_starts(y: np.ndarray, *, target_len: int, segment_count: int) -> list[int]:
+    if len(y) <= target_len:
+        return [0]
+
+    max_start = len(y) - target_len
+    if segment_count <= 1:
+        return [max_start // 2]
+
+    starts: set[int] = set()
+
+    even_starts = np.linspace(0, max_start, num=segment_count, dtype=np.int64).tolist()
+    starts.update(int(start) for start in even_starts)
+
+    dense_count = max(segment_count * 3, segment_count + 2)
+    dense_starts = np.linspace(0, max_start, num=dense_count, dtype=np.int64).tolist()
+    scored = []
+    for start in dense_starts:
+        start = int(start)
+        seg = y[start : start + target_len]
+        scored.append((_segment_signal_score(seg), start))
+
+    top_k = min(segment_count, len(scored))
+    starts.update(start for _, start in sorted(scored, reverse=True)[:top_k])
+    return sorted(starts)
 
 
 def find_model_path() -> str:
@@ -46,7 +81,7 @@ def analyze_audio(
     model: DeepfakeCNN,
     config_dict: Dict,
     *,
-    segment_count: int = 3,
+    segment_count: int = 5,
 ) -> Tuple[str, float]:
     config = AudioConfig(
         sample_rate=config_dict.get("sample_rate", 22050),
@@ -68,16 +103,10 @@ def analyze_audio(
     if y.size == 0:
         raise ValueError("Empty audio provided.")
 
-    if len(y) <= target_len:
-        starts = [0]
-    elif segment_count <= 1:
-        starts = [(len(y) - target_len) // 2]
-    else:
-        max_start = len(y) - target_len
-        starts = np.linspace(0, max_start, num=segment_count, dtype=np.int64).tolist()
-        starts = sorted(set(starts))
+    starts = _candidate_starts(y, target_len=target_len, segment_count=segment_count)
 
     probs_list = []
+    weights = []
     with torch.no_grad():
         for start in starts:
             seg = y[start : start + target_len]
@@ -88,8 +117,13 @@ def analyze_audio(
             tensor = torch.tensor(spec).unsqueeze(0).unsqueeze(0).to(DEVICE)
             probs = torch.softmax(model(tensor), dim=1).squeeze(0)  # shape: (2,)
             probs_list.append(probs)
+            weights.append(_segment_signal_score(seg))
 
-    probs = torch.stack(probs_list, dim=0).mean(dim=0)  # shape: (2,)
+    weight_tensor = torch.tensor(weights, dtype=torch.float32, device=DEVICE)
+    if float(weight_tensor.sum().item()) <= 1e-8:
+        weight_tensor = torch.ones_like(weight_tensor)
+    weight_tensor = weight_tensor / weight_tensor.sum()
+    probs = (torch.stack(probs_list, dim=0) * weight_tensor.unsqueeze(1)).sum(dim=0)
 
     # Allow flexible label mapping (e.g. if user flips real/fake labels during training).
     class_names = config_dict.get(
